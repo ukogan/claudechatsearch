@@ -1,0 +1,41 @@
+#!/bin/bash
+# Claude Search Launcher
+
+PORT=9000
+
+# Get the directory where the app bundle is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# Verify app.py exists (handles case where .app was moved without code)
+if [[ ! -f "$APP_DIR/app.py" ]]; then
+    osascript -e 'display alert "Claude Search" message "app.py not found. Keep Claude Search.app in the same folder as app.py." as critical'
+    exit 1
+fi
+
+LOG_FILE="$APP_DIR/server.log"
+
+# Check if server is already running
+if lsof -i :$PORT -sTCP:LISTEN >/dev/null 2>&1; then
+    open "http://localhost:$PORT"
+    exit 0
+fi
+
+# Install Flask if needed
+if ! python3 -c "import flask" 2>/dev/null; then
+    pip3 install --user flask >/dev/null 2>&1
+fi
+
+# Start the server in background
+cd "$APP_DIR"
+nohup python3 app.py > "$LOG_FILE" 2>&1 &
+
+# Wait for server to start
+for i in {1..10}; do
+    if lsof -i :$PORT -sTCP:LISTEN >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.5
+done
+
+open "http://localhost:$PORT"

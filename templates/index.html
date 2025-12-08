@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Chat Search</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 24px;
+            color: #1a1a1a;
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: #fff;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #666;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .status-bar button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .status-bar button:hover { background: #0066cc; }
+        .status-bar button:disabled { background: #ccc; cursor: not-allowed; }
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 18px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-box input:focus { border-color: #007aff; }
+        .results-count {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        .result {
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+        }
+        .result:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .project-badge {
+            background: #e8f0fe;
+            color: #1a73e8;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .result-meta {
+            font-size: 12px;
+            color: #888;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
+        }
+        .role-user { background: #e3f2fd; color: #1565c0; }
+        .role-assistant { background: #f3e5f5; color: #7b1fa2; }
+        .snippet {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #444;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .snippet mark {
+            background: #fff59d;
+            padding: 1px 2px;
+            border-radius: 2px;
+        }
+        .conversation-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .conversation-modal.active { display: block; }
+        .conversation-content {
+            max-width: 800px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        .conversation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .message {
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+        .message.user { background: #e3f2fd; }
+        .message.assistant { background: #f5f5f5; }
+        .message-role {
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            color: #666;
+        }
+        .message-content {
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .indexing-progress {
+            background: #fff3cd;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Claude Chat Search</h1>
+
+    <div class="status-bar" id="statusBar">
+        <span id="statusText">Loading...</span>
+        <button id="reindexBtn" onclick="reindex()">Reindex</button>
+    </div>
+
+    <div id="indexingProgress" class="indexing-progress" style="display: none;">
+        Indexing: <span id="indexingText">0 / 0 files</span>
+    </div>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search conversations..." autofocus>
+    </div>
+
+    <div id="resultsCount" class="results-count"></div>
+    <div id="results"></div>
+
+    <div class="conversation-modal" id="modal">
+        <div class="conversation-content">
+            <div class="conversation-header">
+                <h2 id="modalTitle">Conversation</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="conversationMessages"></div>
+        </div>
+    </div>
+
+    <script>
+        let searchTimeout;
+        const searchInput = document.getElementById('searchInput');
+        const resultsDiv = document.getElementById('results');
+        const resultsCount = document.getElementById('resultsCount');
+        const statusText = document.getElementById('statusText');
+        const reindexBtn = document.getElementById('reindexBtn');
+        const indexingProgress = document.getElementById('indexingProgress');
+        const indexingText = document.getElementById('indexingText');
+
+        // Debounced search
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(search, 200);
+        });
+
+        // Search on Enter
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                clearTimeout(searchTimeout);
+                search();
+            }
+        });
+
+        async function search() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                resultsDiv.innerHTML = '';
+                resultsCount.textContent = '';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="loading">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                resultsCount.textContent = `${data.count} result${data.count !== 1 ? 's' : ''} for "${query}"`;
+
+                if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<div class="loading">No results found</div>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = data.results.map(r => `
+                    <div class="result" onclick="showConversation('${r.session_id}', '${r.project}')">
+                        <div class="result-header">
+                            <span class="project-badge">${escapeHtml(r.project)}</span>
+                            <span class="result-meta">${formatDate(r.timestamp)}</span>
+                        </div>
+                        <div>
+                            <span class="role-badge role-${r.role}">${r.role}</span>
+                            <span class="snippet">${r.snippet}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                resultsDiv.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        async function showConversation(sessionId, project) {
+            const modal = document.getElementById('modal');
+            const messagesDiv = document.getElementById('conversationMessages');
+            const modalTitle = document.getElementById('modalTitle');
+
+            modal.classList.add('active');
+            modalTitle.textContent = project;
+            messagesDiv.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const res = await fetch(`/conversation/${sessionId}`);
+                const data = await res.json();
+
+                messagesDiv.innerHTML = data.messages.map(m => `
+                    <div class="message ${m.role}">
+                        <div class="message-role">${m.role}</div>
+                        <div class="message-content">${escapeHtml(truncate(m.content, 5000))}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                messagesDiv.innerHTML = `<div class="loading">Error: ${err.message}</div>`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        // Close modal on escape or click outside
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') closeModal();
+        });
+
+        async function updateStatus() {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+
+                if (data.indexing.running) {
+                    reindexBtn.disabled = true;
+                    reindexBtn.textContent = 'Indexing...';
+                    indexingProgress.style.display = 'block';
+                    indexingText.textContent = `${data.indexing.progress} / ${data.indexing.total} files`;
+                    setTimeout(updateStatus, 1000);
+                } else {
+                    reindexBtn.disabled = false;
+                    reindexBtn.textContent = 'Reindex';
+                    indexingProgress.style.display = 'none';
+
+                    if (data.indexed && data.last_indexed) {
+                        const age = formatAge(data.last_indexed);
+                        statusText.textContent = `${data.message_count.toLocaleString()} messages indexed ${age}`;
+                    } else {
+                        statusText.textContent = 'Not indexed yet';
+                    }
+                }
+            } catch (err) {
+                statusText.textContent = 'Error loading status';
+            }
+        }
+
+        async function reindex() {
+            reindexBtn.disabled = true;
+            reindexBtn.textContent = 'Starting...';
+
+            try {
+                await fetch('/reindex', { method: 'POST' });
+                setTimeout(updateStatus, 500);
+            } catch (err) {
+                alert('Error starting reindex: ' + err.message);
+                reindexBtn.disabled = false;
+                reindexBtn.textContent = 'Reindex';
+            }
+        }
+
+        function formatDate(isoStr) {
+            if (!isoStr) return '';
+            const d = new Date(isoStr);
+            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+
+        function formatAge(isoStr) {
+            const d = new Date(isoStr);
+            const now = new Date();
+            const diffMs = now - d;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            return `${diffDays}d ago`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+        }
+
+        function truncate(str, max) {
+            if (!str || str.length <= max) return str;
+            return str.slice(0, max) + '... [truncated]';
+        }
+
+        // Initial status check
+        updateStatus();
+    </script>
+</body>
+</html>
