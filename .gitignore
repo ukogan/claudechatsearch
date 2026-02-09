@@ -14,3 +14,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# Staging for deletion
+for-deletion/
